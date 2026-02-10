@@ -1,0 +1,44 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Triggers only when you push a tag like v1.0, v0.1-alpha
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --no-restore --configuration Release
+
+    - name: Publish (Self-Contained)
+      run: |
+        dotnet publish src/Agent200.Host/Agent200.Host.csproj \
+        -c Release \
+        -r linux-x64 \
+        --self-contained true \
+        -p:PublishSingleFile=true \
+        -o ./publish
+
+    - name: Zip Artifacts
+      run: |
+        cd publish
+        zip -r ../agent200-linux-x64.zip .
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: agent200-linux-x64.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
