@@ -116,6 +116,3 @@ This is a hackathon project, but contributions are welcome! Please read [CONTRIB
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-*Built with passion for the AI Dev Days Hackathon 2026*
