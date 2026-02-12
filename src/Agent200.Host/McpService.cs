@@ -44,7 +44,18 @@ public class McpService : IAsyncDisposable
 
     public async Task<McpClient> CreateGitHubClientAsync(string githubToken)
     {
-        var options = new StdioClientTransportOptions
+        var options = CreateGitHubClientTransportOptions(githubToken);
+
+        var transport = new StdioClientTransport(options);
+        var client = await McpClient.CreateAsync(transport);
+
+        Console.WriteLine("🔌 Connected to GitHub MCP Server (via npx)");
+        return client;
+    }
+
+    public StdioClientTransportOptions CreateGitHubClientTransportOptions(string githubToken)
+    {
+        return new StdioClientTransportOptions
         {
             Command = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) ? "npx.cmd" : "npx",
             Arguments = new[] { "-y", "@modelcontextprotocol/server-github" },
@@ -53,11 +64,5 @@ public class McpService : IAsyncDisposable
                 ["GITHUB_PERSONAL_ACCESS_TOKEN"] = githubToken
             }
         };
-
-        var transport = new StdioClientTransport(options);
-        var client = await McpClient.CreateAsync(transport);
-
-        Console.WriteLine("🔌 Connected to GitHub MCP Server (via npx)");
-        return client;
     }
 }
