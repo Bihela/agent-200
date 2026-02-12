@@ -51,11 +51,18 @@ public class WatchdogService : BackgroundService
     {
         _logger.LogInformation("🔍 Checking Azure metrics (Demonstration mode using Cognitive Services)...");
 
-        var client = await _mcpService.GetClientAsync();
+        var tenant = _config["Azure:TenantId"];
+        var subscription = _config["Azure:SubscriptionId"];
         
-        var subscriptionId = "57eaaae6-c0cf-49b9-b983-8175c001de92";
-        var tenantId = "c1bf6a72-079d-4859-a0e4-630a4c416f80";
-        var resourceGroup = "rg-opsweaver-hackathon";
+        if (string.IsNullOrEmpty(tenant) || string.IsNullOrEmpty(subscription))
+        {
+            _logger.LogWarning("⚠️ Azure:TenantId or Azure:SubscriptionId missing in config. Skipping metrics check.");
+            return;
+        }
+
+        var client = await _mcpService.GetClientAsync(subscription, tenant);
+        
+        var targetResource = "rg-opsweaver-hackathon";
 
         // Using Cognitive Services as a demonstration because App Service Free Tier fails with 404 on metric queries
         var toolArgs = new Dictionary<string, object?>
@@ -63,9 +70,9 @@ public class WatchdogService : BackgroundService
             ["intent"] = "metrics",
             ["command"] = "monitor_metrics_query",
             ["parameters"] = new Dictionary<string, object?> {
-                ["subscription"] = subscriptionId,
-                ["tenant"] = tenantId,
-                ["resource-group"] = resourceGroup,
+                ["subscription"] = subscription,
+                ["tenant"] = tenant,
+                ["resource-group"] = targetResource,
                 ["resource-type"] = "Microsoft.CognitiveServices/accounts",
                 ["resource"] = "opsweaver-GPT", 
                 ["metric-names"] = "ModelAvailabilityRate",
