@@ -51,10 +51,17 @@ public class WatchdogService : BackgroundService
     {
         _logger.LogInformation("🔍 Checking Azure metrics...");
 
-        var client = await _mcpService.GetClientAsync();
+        var tenant = _config["Azure:TenantId"];
+        var subscription = _config["Azure:SubscriptionId"];
         
-        var tenant = "c1bf6a72-079d-4859-a0e4-630a4c416f80";
-        var subscription = "57eaaae6-c0cf-49b9-b983-8175c001de92";
+        if (string.IsNullOrEmpty(tenant) || string.IsNullOrEmpty(subscription))
+        {
+            _logger.LogWarning("⚠️ Azure:TenantId or Azure:SubscriptionId missing in config. Skipping metrics check.");
+            return;
+        }
+
+        var client = await _mcpService.GetClientAsync(subscription, tenant);
+        
         var targetResource = "rg-opsweaver-hackathon";
 
         var args = new Dictionary<string, object?>

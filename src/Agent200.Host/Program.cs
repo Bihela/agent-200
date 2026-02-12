@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.AI;
@@ -49,37 +49,78 @@ Console.WriteLine("\n🚀 Agent 200 Host Started.");
 Console.WriteLine("🐶 Watchdog is monitoring in the background.");
 Console.WriteLine("💬 You can still talk to the agent below.\n");
 
-var mcpService = host.Services.GetRequiredService<McpService>();
-var mcpClient = await mcpService.GetClientAsync();
+var subscriptionId = config["Azure:SubscriptionId"];
+var tenantId = config["Azure:TenantId"];
 
-var mcpTools = await mcpClient.ListToolsAsync();
+if (string.IsNullOrEmpty(subscriptionId) || string.IsNullOrEmpty(tenantId))
+{
+    Console.WriteLine("⚠️ Azure:SubscriptionId or Azure:TenantId is missing in configuration.");
+    return;
+}
+
+var mcpService = host.Services.GetRequiredService<McpService>();
+var azureClient = await mcpService.GetClientAsync(subscriptionId, tenantId);
 var aiTools = new List<AITool>();
 
-foreach (var tool in mcpTools)
+// Helper to map MCP tools to Semantic Kernel AITool
+AITool MapToAITool(McpClientTool tool, McpClient client)
 {
-    aiTools.Add(AIFunctionFactory.Create(async (AIFunctionArguments arguments, System.Threading.CancellationToken ct) => 
+    return AIFunctionFactory.Create(async (IEnumerable<KeyValuePair<string, object?>> args, System.Threading.CancellationToken ct) => 
     {
-        var dict = arguments.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-        var result = await mcpClient.CallToolAsync(tool.Name, new ReadOnlyDictionary<string, object?>(dict), null, null, ct);
+        var dict = args.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+        var result = await client.CallToolAsync(tool.Name, new ReadOnlyDictionary<string, object?>(dict), null, null, ct);
         
         var outputs = result.Content.Select(c => c is TextContentBlock t ? t.Text : c.ToString());
         return string.Join("\n", outputs);
-    }, tool.Name, tool.Description));
+    }, tool.Name, tool.Description);
+}
+
+// 1. Add Azure Tools
+var azureTools = await azureClient.ListToolsAsync();
+foreach(var tool in azureTools) 
+{
+    aiTools.Add(MapToAITool(tool, azureClient));
+}
+
+// 2. Add GitHub Tools (if configured)
+var githubToken = config["GitHub:Token"];
+if (!string.IsNullOrEmpty(githubToken))
+{
+    try 
+    {
+        Console.WriteLine("🔌 Connecting to GitHub...");
+        var githubClient = await mcpService.CreateGitHubClientAsync(githubToken);
+        var githubToolsResult = await githubClient.ListToolsAsync();
+        foreach(var tool in githubToolsResult)
+        {
+             aiTools.Add(MapToAITool(tool, githubClient));
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"⚠️ Failed to connect to GitHub: {ex.Message}");
+        Console.WriteLine($"[Stack Trace]: {ex.StackTrace}");
+    }
+}
+else
+{
+    Console.WriteLine("⚠️ GitHub Token not found. Skipping GitHub tools.");
 }
 
 var agentClient = chatClient.AsBuilder()
    .UseFunctionInvocation()
    .Build();
 
-var systemPrompt = @"You are an Azure expert assistant. You MUST use the provided tools to fetch real data. 
+var systemPrompt = $@"You are an Azure expert assistant. You MUST use the provided tools to fetch real data. 
 CLIENT CONTEXT:
-- Subscription ID: 57eaaae6-c0cf-49b9-b983-8175c001de92
-- Tenant ID: c1bf6a72-079d-4859-a0e4-630a4c416f80
+- Subscription ID: {subscriptionId}
+- Tenant ID: {tenantId}
 
 CRITICAL INSTRUCTIONS:
 1. To list resource groups, use the 'group_list' tool.
 2. YOU MUST PASS BOTH 'tenant' AND 'subscription' PARAMETERS TO EVERY TOOL CALL.
-3. Do not make up data.";
+3. For GitHub, use the provided tools to inspect repositories and workflows.
+4. Do not make up data.";
 
 while (true)
 {
