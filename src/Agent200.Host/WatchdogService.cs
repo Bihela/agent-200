@@ -49,29 +49,51 @@ public class WatchdogService : BackgroundService
 
     private async Task CheckMetricsAsync(CancellationToken ct)
     {
-        _logger.LogInformation("🔍 Checking Azure metrics...");
+        _logger.LogInformation("🔍 Checking Azure metrics (Demonstration mode using Cognitive Services)...");
 
         var client = await _mcpService.GetClientAsync();
         
-        var tenant = "c1bf6a72-079d-4859-a0e4-630a4c416f80";
-        var subscription = "57eaaae6-c0cf-49b9-b983-8175c001de92";
-        var targetResource = "rg-opsweaver-hackathon";
+        var subscriptionId = "57eaaae6-c0cf-49b9-b983-8175c001de92";
+        var tenantId = "c1bf6a72-079d-4859-a0e4-630a4c416f80";
+        var resourceGroup = "rg-opsweaver-hackathon";
 
-        var args = new Dictionary<string, object?>
+        // Using Cognitive Services as a demonstration because App Service Free Tier fails with 404 on metric queries
+        var toolArgs = new Dictionary<string, object?>
         {
-            ["tenant"] = tenant,
-            ["subscription"] = subscription
+            ["intent"] = "metrics",
+            ["command"] = "monitor_metrics_query",
+            ["parameters"] = new Dictionary<string, object?> {
+                ["subscription"] = subscriptionId,
+                ["tenant"] = tenantId,
+                ["resource-group"] = resourceGroup,
+                ["resource-type"] = "Microsoft.CognitiveServices/accounts",
+                ["resource"] = "opsweaver-GPT", 
+                ["metric-names"] = "ModelAvailabilityRate",
+                ["metric-namespace"] = "Microsoft.CognitiveServices/accounts",
+                ["interval"] = "PT1M",
+                ["aggregation"] = "Average"
+            }
         };
-
-        var result = await client.CallToolAsync("group_list", new ReadOnlyDictionary<string, object?>(args), null, null, ct);
         
-        if (_healthEvaluator.IsHealthy(result, targetResource))
+        try 
         {
-            _logger.LogInformation("✅ System Healthy: Hackathon Resource Group is visible.");
+             var result = await client.CallToolAsync("monitor", new ReadOnlyDictionary<string, object?>(toolArgs), null, null, ct);
+             
+             var text = string.Join("\n", result.Content.Select(c => c is TextContentBlock t ? t.Text : c.ToString()));
+             _logger.LogInformation($"📊 Metric Response START:\n{text}\nMetric Response END");
+
+             if (!string.IsNullOrEmpty(text) && (text.Contains("ModelAvailabilityRate") || text.Contains("Success")))
+             {
+                 _logger.LogInformation("✅ Watchdog: Metric retrieved successfully (Demonstration).");
+             }
+             else
+             {
+                 _logger.LogWarning($"⚠️ Watchdog: Unexpected response from monitor tool. Length: {text.Length}");
+             }
         }
-        else
+        catch(Exception ex)
         {
-            _logger.LogWarning("⚠️ HIGH ALERT: Target resource group not found or inaccessible!");
+             _logger.LogError(ex, "Failed to call monitor_metrics_query tool.");
         }
     }
 }
