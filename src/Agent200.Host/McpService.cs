@@ -9,19 +9,19 @@ public class McpService : IAsyncDisposable
     private McpClient? _client;
     private StdioClientTransport? _transport;
 
-    public async Task<McpClient> GetClientAsync()
+    public async Task<McpClient> GetClientAsync(string subscriptionId, string tenantId)
     {
         if (_client != null) return _client;
 
         // This launches the Azure MCP server as a background process
         var options = new StdioClientTransportOptions
         {
-            Command = "npx", 
+            Command = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) ? "npx.cmd" : "npx", 
             Arguments = new[] { "-y", "@azure/mcp", "server", "start" },
             EnvironmentVariables = new Dictionary<string, string?>
             {
-                ["AZURE_SUBSCRIPTION_ID"] = "57eaaae6-c0cf-49b9-b983-8175c001de92",
-                ["AZURE_TENANT_ID"] = "c1bf6a72-079d-4859-a0e4-630a4c416f80"
+                ["AZURE_SUBSCRIPTION_ID"] = subscriptionId,
+                ["AZURE_TENANT_ID"] = tenantId
             }
         };
 
@@ -40,5 +40,24 @@ public class McpService : IAsyncDisposable
             // _transport?.Dispose(); // Removed as it doesn't exist
         }
         await Task.CompletedTask;
+    }
+
+    public async Task<McpClient> CreateGitHubClientAsync(string githubToken)
+    {
+        var options = new StdioClientTransportOptions
+        {
+            Command = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) ? "npx.cmd" : "npx",
+            Arguments = new[] { "-y", "@modelcontextprotocol/server-github" },
+            EnvironmentVariables = new Dictionary<string, string?>
+            {
+                ["GITHUB_PERSONAL_ACCESS_TOKEN"] = githubToken
+            }
+        };
+
+        var transport = new StdioClientTransport(options);
+        var client = await McpClient.CreateAsync(transport);
+
+        Console.WriteLine("🔌 Connected to GitHub MCP Server (via npx)");
+        return client;
     }
 }
