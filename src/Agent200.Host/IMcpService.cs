@@ -1,3 +1,4 @@
+using Microsoft.Extensions.AI;
 using ModelContextProtocol.Client;
 
 namespace Agent200.Host;
@@ -27,4 +28,10 @@ public interface IMcpService : IAsyncDisposable
     /// Returns all currently active and connected MCP clients.
     /// </summary>
     IEnumerable<IMcpClient> GetActiveClients();
+
+    /// <summary>
+    /// Aggregates tools from all active MCP clients and maps them to AITool objects.
+    /// </summary>
+    /// <returns>A list of AITool objects ready for use with AI agents.</returns>
+    Task<List<AITool>> GetAIToolsAsync();
 }

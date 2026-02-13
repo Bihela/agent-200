@@ -17,13 +17,13 @@ public class InvestigatorAgent : IInvestigatorAgent
 {
     private readonly ILogger<InvestigatorAgent> _logger;
     private readonly IChatClient _chatClient;
-    private readonly McpService _mcpService;
+    private readonly IMcpService _mcpService;
     private readonly IConfiguration _config;
 
     public InvestigatorAgent(
         ILogger<InvestigatorAgent> logger,
         IChatClient chatClient,
-        McpService mcpService,
+        IMcpService mcpService,
         IConfiguration config)
     {
         _logger = logger;
@@ -32,23 +32,16 @@ public class InvestigatorAgent : IInvestigatorAgent
         _config = config;
     }
 
-    /// <summary>
-    /// Performs an investigation into a detected anomaly.
-    /// Correlates Azure metrics with GitHub activity and code changes.
-    /// </summary>
-    public async Task<string> InvestigateAnomalyAsync(string anomalyDescription)
+    /// <inheritdoc />
+    public AIAgent AsAgent()
     {
-        _logger.LogInformation("🕵️ Investigator Agent awakening to investigate: {Anomaly}", anomalyDescription);
-
-        // 1. Prepare Tools
-        var allTools = await GetAllMcpToolsAsync();
-
-        // 2. Configure the Agent
         var subscriptionId = _config["Azure:SubscriptionId"];
         var tenantId = _config["Azure:TenantId"];
 
-        var systemPrompt = $@"You are a Senior SRE Investigator. Your goal is to find the ROOT CAUSE of the following anomaly:
-{anomalyDescription}
+        // Construct the system prompt with dynamic context (Subscription, Tenant, Repo).
+        // This ensures the LLM knows exactly which environment to investigate without hallucinating resource IDs.
+
+        var systemPrompt = $@"You are a Senior SRE Investigator. Your goal is to find the ROOT CAUSE of the following anomaly.
 
 STEPS TO FOLLOW:
 1. Examine Azure resources in the 'rg-opsweaver-hackathon' group to see if any deployments or configuration changes occurred.
@@ -59,19 +52,27 @@ STEPS TO FOLLOW:
 Azure Context:
 - Subscription: {subscriptionId}
 - Tenant: {tenantId}
+- GitHub Repository: Bihela/opsweaver-test-ground
 
 CRITICAL: Always pass 'subscription' and 'tenant' to Azure tools.";
 
-        // 3. Create the Agent using Microsoft Agent Framework
-        // Setting Name and Instructions via constructor as properties are read-only.
-        var agent = new ChatClientAgent(
+        return new ChatClientAgent(
             _chatClient, 
             instructions: systemPrompt, 
             name: "Investigator",
             description: "Senior SRE Investigator for Root Cause Analysis");
+    }
 
-        // 4. Run the Investigation
-        // We use ChatClientAgentRunOptions to pass our toolset.
+    /// <summary>
+    /// Performs an investigation into a detected anomaly.
+    /// Correlates Azure metrics with GitHub activity and code changes.
+    /// </summary>
+    public async Task<string> InvestigateAnomalyAsync(string anomalyDescription)
+    {
+        _logger.LogInformation("🕵️ Investigator Agent awakening to investigate: {Anomaly}", anomalyDescription);
+
+        var agent = AsAgent();
+        var allTools = await _mcpService.GetAIToolsAsync();
         var chatOptions = new ChatOptions { Tools = allTools };
         var runOptions = new ChatClientAgentRunOptions(chatOptions);
         
@@ -87,56 +88,4 @@ CRITICAL: Always pass 'subscription' and 'tenant' to Azure tools.";
             return $"Investigation failed: {ex.Message}";
         }
     }
-
-    /// <summary>
-    /// Aggregates tools from all active MCP clients (e.g., Azure monitor, GitHub repo access).
-    /// This allows the agent to reason across platform boundaries for RCA.
-    /// </summary>
-    private async Task<List<AITool>> GetAllMcpToolsAsync()
-    {
-        var aiTools = new List<AITool>();
-        var clients = _mcpService.GetActiveClients();
-
-        foreach (var client in clients)
-        {
-            // List all tools available on the current MCP client.
-            var tools = await client.ListToolsAsync();
-            foreach (var tool in tools)
-            {
-                // Map each MCP tool to a Microsoft.Extensions.AI tool for the agent to use.
-                aiTools.Add(MapToAITool(tool, client));
-            }
-        }
-
-        return aiTools;
-    }
-
-    private AITool MapToAITool(McpClientTool tool, IMcpClient client)
-    {
-        var aiFunc = AIFunctionFactory.Create(async (AIFunctionArguments args, System.Threading.CancellationToken ct) => 
-        {
-            var dict = args.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-            var result = await client.CallToolAsync(tool.Name, new ReadOnlyDictionary<string, object?>(dict), null, null, ct);
-            
-            var outputs = result.Content.Select(c => c is TextContentBlock t ? t.Text : c.ToString());
-            return string.Join("\n", outputs);
-        }, tool.Name, tool.Description);
-
-        return new McpAIFunction(aiFunc, tool.ProtocolTool.InputSchema);
-    }
-}
-
-/// <summary>
-/// A wrapper for AIFunction that allows overriding the JsonSchema.
-/// Internal to allow sharing logic with Program.cs if needed, but here for standalone capability.
-/// </summary>
-internal class McpAIFunction : DelegatingAIFunction
-{
-    public McpAIFunction(AIFunction innerFunction, JsonElement jsonSchema)
-        : base(innerFunction)
-    {
-        JsonSchema = jsonSchema;
-    }
-
-    public override JsonElement JsonSchema { get; }
 }

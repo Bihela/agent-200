@@ -1,6 +1,9 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.AI;
+using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Workflows;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using System.Collections.ObjectModel;
@@ -14,6 +17,7 @@ public class WatchdogService : BackgroundService
     private readonly IMcpService _mcpService;
     private readonly IHealthEvaluator _healthEvaluator;
     private readonly IInvestigatorAgent _investigator;
+    private readonly IFixerAgent _fixer;
     
     private const int PollingIntervalSeconds = 60;
 
@@ -22,13 +26,15 @@ public class WatchdogService : BackgroundService
         IConfiguration config, 
         IMcpService mcpService,
         IHealthEvaluator healthEvaluator,
-        IInvestigatorAgent investigator)
+        IInvestigatorAgent investigator,
+        IFixerAgent fixer)
     {
         _logger = logger;
         _config = config;
         _mcpService = mcpService;
         _healthEvaluator = healthEvaluator;
         _investigator = investigator;
+        _fixer = fixer;
     }
 
     /// <summary>
@@ -116,18 +122,38 @@ public class WatchdogService : BackgroundService
              }
              else
              {
-                 _logger.LogWarning("🚨 Watchdog: CPU SPIKE DETECTED! Triggering Investigator...");
-                 
-                 // TRIGGER TIER 2 HANDOFF:
-                 // The Watchdog (Tier 1) has detected a rule-based anomaly.
-                 // We now "awaken" the Investigator (Tier 2) for autonomous Root Cause Analysis.
-                 // This tiered approach saves cost by only invoking expensive AI reasoning when necessary.
-                 var rcaResponse = await _investigator.InvestigateAnomalyAsync($"CPU spike detected on {targetResource}. Metrics: {logText}");
-                 
-                 _logger.LogInformation("📄 Investigator RCA Output:\n{RCA}", rcaResponse);
-                 
-                 // FUTURE: Tier 3 (Fixer) handoff could be implemented here to automatically draft a PR.
-             }
+                  _logger.LogWarning("🚨 Watchdog: CPU SPIKE DETECTED! Awakening Tier 2 (Investigator) and Tier 3 (Fixer) via Agent Workflow...");
+                  
+                  // TRIGGER MULTI-AGENT WORKFLOW:
+                  // 1. Investigator evaluates Root Cause (RCA).
+                  // 2. Fixer applies remediation (PR).
+                  
+                  // Manual Handoff Workflow (Fallback due to Framework Preview Issues)
+                  // ------------------------------------------------------------------
+                  // Due to current limitations in the preview version of Microsoft.Agents.AI.Workflows 
+                  // (specifically with HandoffsWorkflowBuilder), we are manually orchestrating the agent loop here.
+                  // 
+                  // 1. Investigator Agent: Analyze Root Cause
+                  //    - Takes the raw metric data and anomaly description.
+                  //    - Outputs a detailed RCA report.
+                  _logger.LogInformation("🕵️ Starting Investigation...");
+                  string rcaReport = await _investigator.InvestigateAnomalyAsync($"Anomaly detected: CPU spike on {targetResource}. Metrics: {logText}");
+                  _logger.LogInformation($"✅ Investigation Complete. RCA: {rcaReport}");
+
+                  // 2. Fixer Agent: Apply Remediation (if RCA is valid)
+                  //    - Only triggers if the Investigator found a plausible root cause.
+                  //    - Uses the RCA to determine the correct fix (e.g., revert commit, update config).
+                  if (!string.IsNullOrWhiteSpace(rcaReport) && !rcaReport.Contains("No root cause identified"))
+                  {
+                      _logger.LogInformation("🛠️ Starting Remediation...");
+                      string remediationSummary = await _fixer.RemediateAsync(rcaReport);
+                      _logger.LogInformation($"✅ Remediation Complete. Summary: {remediationSummary}");
+                  }
+                  else
+                  {
+                      _logger.LogWarning("⚠️ Skipping Remediation: No valid root cause identified.");
+                  }
+              }
         }
         catch(Exception ex)
         {

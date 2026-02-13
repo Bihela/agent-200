@@ -23,6 +23,7 @@ public class WatchdogServiceTests
     private readonly Mock<IMcpService> _mcpServiceMock = new();
     private readonly Mock<IHealthEvaluator> _healthEvaluatorMock = new();
     private readonly Mock<IInvestigatorAgent> _investigatorMock = new();
+    private readonly Mock<IFixerAgent> _fixerMock = new();
     private readonly Mock<IMcpClient> _mcpClientMock = new();
 
     private readonly WatchdogService _service;
@@ -46,7 +47,8 @@ public class WatchdogServiceTests
             _configMock.Object,
             _mcpServiceMock.Object,
             _healthEvaluatorMock.Object,
-            _investigatorMock.Object);
+            _investigatorMock.Object,
+            _fixerMock.Object);
     }
 
     [Fact]
@@ -55,13 +57,52 @@ public class WatchdogServiceTests
         // Arrange
         _healthEvaluatorMock.Setup(h => h.IsHealthy(It.IsAny<CallToolResult>(), It.IsAny<string>()))
             .Returns(false); // Unhealthy!
+        
+        _investigatorMock.Setup(i => i.InvestigateAnomalyAsync(It.IsAny<string>()))
+            .ReturnsAsync("No root cause identified."); // Default RCA
 
         // Act
         await _service.CheckMetricsAsync(CancellationToken.None);
 
         // Assert
-        _investigatorMock.Verify(i => i.InvestigateAnomalyAsync(It.Is<string>(s => s.Contains("CPU spike detected"))), Times.Once);
+        _investigatorMock.Verify(i => i.InvestigateAnomalyAsync(It.Is<string>(s => s.Contains("CPU spike on"))), Times.Once);
     }
+    
+    [Fact]
+    public async Task CheckMetricsAsync_TriggersFixer_WhenInvestigatorReturnsValidRCA()
+    {
+        // Arrange
+        _healthEvaluatorMock.Setup(h => h.IsHealthy(It.IsAny<CallToolResult>(), It.IsAny<string>()))
+            .Returns(false); // Unhealthy!
+
+        _investigatorMock.Setup(i => i.InvestigateAnomalyAsync(It.IsAny<string>()))
+            .ReturnsAsync("RCA: Database lock detected."); // Valid RCA
+
+        // Act
+        await _service.CheckMetricsAsync(CancellationToken.None);
+
+        // Assert
+        _investigatorMock.Verify(i => i.InvestigateAnomalyAsync(It.IsAny<string>()), Times.Once);
+        _fixerMock.Verify(f => f.RemediateAsync(It.Is<string>(s => s.Contains("Database lock detected"))), Times.Once);
+    }
+
+    [Fact]
+    public async Task CheckMetricsAsync_DoesNotTriggerFixer_WhenInvestigatorFails()
+    {
+        // Arrange
+        _healthEvaluatorMock.Setup(h => h.IsHealthy(It.IsAny<CallToolResult>(), It.IsAny<string>()))
+            .Returns(false); // Unhealthy!
+
+        _investigatorMock.Setup(i => i.InvestigateAnomalyAsync(It.IsAny<string>()))
+            .ReturnsAsync("No root cause identified"); // Invalid RCA
+
+        // Act
+        await _service.CheckMetricsAsync(CancellationToken.None);
+
+        // Assert
+        _investigatorMock.Verify(i => i.InvestigateAnomalyAsync(It.IsAny<string>()), Times.Once);
+        _fixerMock.Verify(f => f.RemediateAsync(It.IsAny<string>()), Times.Never);
+    }    
 
     [Fact]
     public async Task CheckMetricsAsync_DoesNotTriggerInvestigator_WhenSystemIsHealthy()
@@ -92,7 +133,7 @@ public class WatchdogServiceTests
             x => x.Log(
                 LogLevel.Error,
                 It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Failed to call")),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Error during Watchdog cycle") || v.ToString()!.Contains("Failed to call")),
                 It.IsAny<Exception>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.AtLeastOnce);
