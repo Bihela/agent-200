@@ -102,11 +102,11 @@ graph TD
     dotnet run
     ```
 
+5.  **Running Tests**
     Agent 200 includes a comprehensive unit test suite to ensure core logic (metric evaluation, tool mapping) and autonomous handoff remains stable.
     
     *   **Health Evaluator Tests**: Validates metric parsing for various Azure JSON formats.
     *   **Watchdog Handoff Tests**: Uses **Moq** and interface-based abstraction (`IMcpClient`) to verify Tier 1 to Tier 2 transitions without requiring live cloud resources.
-
     ```bash
     cd src/Agent200.Tests
     dotnet test
