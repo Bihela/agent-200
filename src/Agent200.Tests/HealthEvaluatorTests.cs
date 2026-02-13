@@ -61,4 +61,46 @@ public class HealthEvaluatorTests
         // Assert
         Assert.False(result);
     }
+
+    [Fact]
+    public void IsHealthy_ReturnsFalse_WhenCpuAboveThreshold_InAvgBucketsFormat()
+    {
+        // Arrange
+        var json = "{\"results\":{\"results\":[{\"timeSeries\":[{\"avgBuckets\":[10, 20, 95.5]}]}]}}";
+        var toolResult = new CallToolResult { Content = new List<ContentBlock> { new TextContentBlock { Text = json } } };
+        
+        // Act
+        var result = _evaluator.IsHealthy(toolResult, "any");
+
+        // Assert
+        Assert.False(result); // 95.5 > 80.0
+    }
+
+    [Fact]
+    public void IsHealthy_ReturnsTrue_WhenCpuBelowThreshold_InAvgBucketsFormat()
+    {
+        // Arrange
+        var json = "{\"results\":{\"results\":[{\"timeSeries\":[{\"avgBuckets\":[10, 20, 15.5]}]}]}}";
+        var toolResult = new CallToolResult { Content = new List<ContentBlock> { new TextContentBlock { Text = json } } };
+        
+        // Act
+        var result = _evaluator.IsHealthy(toolResult, "any");
+
+        // Assert
+        Assert.True(result); // 15.5 < 80.0
+    }
+
+    [Fact]
+    public void IsHealthy_ReturnsFalse_WhenCpuAboveThreshold_InDataFormat()
+    {
+        // Arrange
+        var json = "{\"results\":{\"results\":[{\"timeSeries\":[{\"data\":[{\"average\":85.0}]}]}]}}";
+        var toolResult = new CallToolResult { Content = new List<ContentBlock> { new TextContentBlock { Text = json } } };
+        
+        // Act
+        var result = _evaluator.IsHealthy(toolResult, "any");
+
+        // Assert
+        Assert.False(result); // 85.0 > 80.0
+    }
 }

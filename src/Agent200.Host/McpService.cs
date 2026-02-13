@@ -9,11 +9,15 @@ public class McpService : IAsyncDisposable
     private McpClient? _client;
     private StdioClientTransport? _transport;
 
+    /// <summary>
+    /// Gets or creates an MCP client for the Azure MCP server.
+    /// Uses stdio transport to launch the '@azure/mcp' package via npx.
+    /// </summary>
     public async Task<McpClient> GetClientAsync(string subscriptionId, string tenantId)
     {
         if (_client != null) return _client;
 
-        // This launches the Azure MCP server as a background process
+        // Configuration for the Azure MCP server transport.
         var options = new StdioClientTransportOptions
         {
             Command = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) ? "npx.cmd" : "npx", 
@@ -32,6 +36,9 @@ public class McpService : IAsyncDisposable
         return _client;
     }
 
+    /// <summary>
+    /// Disposes the client and releases resources.
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
         if (_client != null)
@@ -42,6 +49,9 @@ public class McpService : IAsyncDisposable
         await Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Creates a dedicated MCP client for the GitHub MCP server.
+    /// </summary>
     public async Task<McpClient> CreateGitHubClientAsync(string githubToken)
     {
         var options = CreateGitHubClientTransportOptions(githubToken);
@@ -53,6 +63,10 @@ public class McpService : IAsyncDisposable
         return client;
     }
 
+    /// <summary>
+    /// Configures the transport options for the GitHub MCP server.
+    /// Launches the '@modelcontextprotocol/server-github' package via npx.
+    /// </summary>
     public StdioClientTransportOptions CreateGitHubClientTransportOptions(string githubToken)
     {
         return new StdioClientTransportOptions
@@ -61,6 +75,7 @@ public class McpService : IAsyncDisposable
             Arguments = new[] { "-y", "@modelcontextprotocol/server-github" },
             EnvironmentVariables = new Dictionary<string, string?>
             {
+                // Note: The GitHub MCP server requires GITHUB_PERSONAL_ACCESS_TOKEN.
                 ["GITHUB_PERSONAL_ACCESS_TOKEN"] = githubToken
             }
         };

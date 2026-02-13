@@ -83,14 +83,30 @@ graph TD
     ```bash
     cd src/Agent200.Host
     dotnet user-secrets init
+    
+    # Azure OpenAI Configuration
     dotnet user-secrets set "AzureOpenAI:Endpoint" "https://YOUR_RES.openai.azure.com/"
     dotnet user-secrets set "AzureOpenAI:Key" "YOUR_KEY"
     dotnet user-secrets set "AzureOpenAI:Deployment" "gpt-4o-mini"
+    
+    # Azure Subscription Details (for MCP)
+    dotnet user-secrets set "Azure:SubscriptionId" "YOUR_SUBSCRIPTION_ID"
+    dotnet user-secrets set "Azure:TenantId" "YOUR_TENANT_ID"
+    
+    # GitHub Integration
+    dotnet user-secrets set "GitHub:Token" "your_actual_github_pat"
     ```
 
 4.  **Run the Agent**
     ```bash
     dotnet run
+    ```
+
+5.  **Running Tests**
+    Agent 200 includes a suite of unit tests to ensure core logic (metric evaluation, tool mapping) remains stable.
+    ```bash
+    cd src/Agent200.Tests
+    dotnet test
     ```
 
 ## Usage Example
