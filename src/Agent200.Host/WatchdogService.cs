@@ -28,6 +28,10 @@ public class WatchdogService : BackgroundService
         _healthEvaluator = healthEvaluator;
     }
 
+    /// <summary>
+    /// Background service that polls Azure metrics and evaluates system health.
+    /// Polling interval is currently set to 60 seconds.
+    /// </summary>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("🐶 Watchdog Service starting...");
@@ -47,9 +51,13 @@ public class WatchdogService : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Core monitoring logic. Connects to the Azure MCP monitor tool to retrieve
+    /// CPU usage metrics and passes them to the HealthEvaluator for analysis.
+    /// </summary>
     private async Task CheckMetricsAsync(CancellationToken ct)
     {
-        _logger.LogInformation("🔍 Checking Azure metrics (Demonstration mode using Cognitive Services)...");
+        _logger.LogInformation("🔍 Checking Azure metrics...");
 
         var tenant = _config["Azure:TenantId"];
         var subscription = _config["Azure:SubscriptionId"];
@@ -62,9 +70,11 @@ public class WatchdogService : BackgroundService
 
         var client = await _mcpService.GetClientAsync(subscription, tenant);
         
-        var targetResource = "rg-opsweaver-hackathon";
+        // Resource name of the App Service Plan to monitor.
+        var targetResource = "asp-cpuspiker-free-central";
 
-        // Using Cognitive Services as a demonstration because App Service Free Tier fails with 404 on metric queries
+        // Arguments for the 'monitor_metrics_query' tool.
+        // We use a 5-minute interval (PT5M) and look at the last 1 hour (PT1H) to avoid throttling and bucket limits.
         var toolArgs = new Dictionary<string, object?>
         {
             ["intent"] = "metrics",
@@ -72,30 +82,38 @@ public class WatchdogService : BackgroundService
             ["parameters"] = new Dictionary<string, object?> {
                 ["subscription"] = subscription,
                 ["tenant"] = tenant,
-                ["resource-group"] = targetResource,
-                ["resource-type"] = "Microsoft.CognitiveServices/accounts",
-                ["resource"] = "opsweaver-GPT", 
-                ["metric-names"] = "ModelAvailabilityRate",
-                ["metric-namespace"] = "Microsoft.CognitiveServices/accounts",
-                ["interval"] = "PT1M",
-                ["aggregation"] = "Average"
+                ["resource-group"] = "rg-opsweaver-hackathon",
+                ["resource-type"] = "Microsoft.Web/serverfarms",
+                ["resource"] = targetResource, 
+                ["metric-names"] = "CpuPercentage",
+                ["metric-namespace"] = "Microsoft.Web/serverfarms",
+                ["interval"] = "PT5M",
+                ["aggregation"] = "Average",
+                ["timespan"] = "PT1H" // Last 1 hour
             }
         };
         
         try 
         {
+             // Invoke the MCP monitor tool.
              var result = await client.CallToolAsync("monitor", new ReadOnlyDictionary<string, object?>(toolArgs), null, null, ct);
              
              var text = string.Join("\n", result.Content.Select(c => c is TextContentBlock t ? t.Text : c.ToString()));
-             _logger.LogInformation($"📊 Metric Response START:\n{text}\nMetric Response END");
+             
+             // Log the first 500 characters of the response for debugging purposes.
+             var logText = text.Length > 500 ? text.Substring(0, 500) + "..." : text;
+             _logger.LogInformation($"📊 Metric Response (first 500 chars):\n{logText}");
 
-             if (!string.IsNullOrEmpty(text) && (text.Contains("ModelAvailabilityRate") || text.Contains("Success")))
+             // Evaluate health based on the metric result.
+             bool isHealthy = _healthEvaluator.IsHealthy(result, targetResource);
+             
+             if (isHealthy)
              {
-                 _logger.LogInformation("✅ Watchdog: Metric retrieved successfully (Demonstration).");
+                 _logger.LogInformation("✅ Watchdog: System is healthy.");
              }
              else
              {
-                 _logger.LogWarning($"⚠️ Watchdog: Unexpected response from monitor tool. Length: {text.Length}");
+                 _logger.LogWarning("🚨 Watchdog: CPU SPIKE DETECTED! System is unhealthy.");
              }
         }
         catch(Exception ex)
