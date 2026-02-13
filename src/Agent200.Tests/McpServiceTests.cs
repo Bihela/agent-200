@@ -26,8 +26,9 @@ public class McpServiceTests
             Assert.Equal("npx", options.Command);
         }
 
-        Assert.Contains("-y", options.Arguments);
-        Assert.Contains("@modelcontextprotocol/server-github", options.Arguments);
+        Assert.Contains("-y", options.Arguments!);
+        Assert.Contains("@modelcontextprotocol/server-github", options.Arguments!);
+        Assert.NotNull(options.EnvironmentVariables);
         Assert.True(options.EnvironmentVariables.ContainsKey("GITHUB_PERSONAL_ACCESS_TOKEN"));
         Assert.Equal(token, options.EnvironmentVariables["GITHUB_PERSONAL_ACCESS_TOKEN"]);
     }

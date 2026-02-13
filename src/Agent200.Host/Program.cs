@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Azure.Identity;
@@ -8,6 +9,7 @@ using OpenAI;
 using Azure.AI.OpenAI;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
+using McpDotNet.Extensions.AI;
 using Agent200.Host;
 using Agent200.Host.Services;
 
@@ -17,8 +19,9 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Configuration.AddUserSecrets<Program>();
 
 // 1. Configure Services
-builder.Services.AddSingleton<McpService>();
+builder.Services.AddSingleton<IMcpService, McpService>();
 builder.Services.AddSingleton<IHealthEvaluator, HealthEvaluator>();
+builder.Services.AddSingleton<IInvestigatorAgent, InvestigatorAgent>();
 builder.Services.AddHostedService<WatchdogService>();
 
 // 2. Register AI Components
@@ -34,13 +37,16 @@ if (string.IsNullOrEmpty(endpointString) || string.IsNullOrEmpty(key))
     return;
 }
 
-IChatClient chatClient = new AzureOpenAIClient(new Uri(endpointString), new System.ClientModel.ApiKeyCredential(key))
+IChatClient chatClient = new AzureOpenAIClient(new Uri(endpointString!), new System.ClientModel.ApiKeyCredential(key!))
    .GetChatClient(deploymentName)
    .AsIChatClient();
 
 builder.Services.AddSingleton(chatClient);
 
 var host = builder.Build();
+
+var logger = host.Services.GetRequiredService<ILogger<Program>>();
+logger.LogInformation("🚀 Agent 200 Host started.");
 
 // 3. Setup Interactive Agent capability
 await host.StartAsync();
@@ -58,21 +64,30 @@ if (string.IsNullOrEmpty(subscriptionId) || string.IsNullOrEmpty(tenantId))
     return;
 }
 
-var mcpService = host.Services.GetRequiredService<McpService>();
-var azureClient = await mcpService.GetClientAsync(subscriptionId, tenantId);
+var mcpService = host.Services.GetRequiredService<IMcpService>();
+var azureClient = await mcpService.GetAzureClientAsync(subscriptionId, tenantId);
 var aiTools = new List<AITool>();
 
 // Helper to map MCP tools to Semantic Kernel AITool
-AITool MapToAITool(McpClientTool tool, McpClient client)
+/// <summary>
+/// Maps an MCP tool to a Microsoft.Extensions.AI AITool.
+/// Uses the McpAIFunction wrapper to ensure the MCP tool's input schema is preserved.
+/// </summary>
+AITool MapToAITool(McpClientTool tool, IMcpClient client)
 {
-    return AIFunctionFactory.Create(async (IEnumerable<KeyValuePair<string, object?>> args, System.Threading.CancellationToken ct) => 
+    // Create the base AI function with a delegate that handles parameter extraction and tool invocation.
+    var aiFunc = AIFunctionFactory.Create(async (AIFunctionArguments args, System.Threading.CancellationToken ct) => 
     {
         var dict = args.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
         var result = await client.CallToolAsync(tool.Name, new ReadOnlyDictionary<string, object?>(dict), null, null, ct);
         
+        // Collate and return the tool's text output.
         var outputs = result.Content.Select(c => c is TextContentBlock t ? t.Text : c.ToString());
         return string.Join("\n", outputs);
     }, tool.Name, tool.Description);
+
+    // Wrap the base function in McpAIFunction to override the schema metadata with the official MCP schema.
+    return new McpAIFunction(aiFunc, tool.ProtocolTool.InputSchema);
 }
 
 // 1. Add Azure Tools
@@ -89,7 +104,7 @@ if (!string.IsNullOrEmpty(githubToken))
     try 
     {
         Console.WriteLine("🔌 Connecting to GitHub...");
-        var githubClient = await mcpService.CreateGitHubClientAsync(githubToken);
+        var githubClient = await mcpService.GetGitHubClientAsync(githubToken);
         var githubToolsResult = await githubClient.ListToolsAsync();
         foreach(var tool in githubToolsResult)
         {
@@ -151,3 +166,19 @@ while (true)
 }
 
 await host.StopAsync();
+
+/// <summary>
+/// A wrapper for AIFunction that allows overriding the JsonSchema.
+/// This is used to pass the correct schema from MCP tools to the AI model,
+/// ensuring that required parameters (like 'query' or 'repo') are correctly inferred by the model.
+/// </summary>
+class McpAIFunction : DelegatingAIFunction
+{
+    public McpAIFunction(AIFunction innerFunction, System.Text.Json.JsonElement jsonSchema)
+        : base(innerFunction)
+    {
+        JsonSchema = jsonSchema;
+    }
+
+    public override System.Text.Json.JsonElement JsonSchema { get; }
+}

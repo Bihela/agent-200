@@ -16,18 +16,18 @@ Instead of sending terabytes of logs to a central cloud (expensive), Agent 200 b
 ### Key Features
 
 **Tier 1: Zero-Cost Watchdog**
-*   Runs locally using Phi-3-mini.
+*   Runs locally using Phi-3-mini or rule-based logic.
 *   Polls Azure Monitor metrics 24/7 for free.
-*   Only wakes up the "expensive" cloud agent when an anomaly is detected.
+*   **Intelligent Handoff**: Only wakes up the "expensive" cloud agent when an anomaly (e.g., CPU spike > 50%) is detected.
 
-**Tier 2: Cloud Investigator**
-*   Powered by Azure OpenAI (GPT-4o-mini).
-*   Connects to Azure MCP to read live metrics and resource health.
-*   Connects to GitHub MCP to read CI/CD build logs and commit history.
+**Tier 2: Cloud Investigator (Autonomous RCA)**
+*   Powered by Azure OpenAI (**GPT-4o-mini**).
+*   **Multi-Platform Reasoning**: Connects to Azure MCP (metrics) and GitHub MCP (logs/repo) to correlate platform events with code changes.
+*   **Autonomous Documentation**: Generates a detailed Root Cause Analysis (RCA) report with remediation recommendations.
 
-**Tier 3: The Fixer**
-*   Correlates the infrastructure failure with the specific code commit.
-*   Drafts a Pull Request with the fix using GitHub Copilot Agent Mode.
+**Tier 3: The Fixer (Coming Soon)**
+*   Correlates infrastructure failures with specific code commits.
+*   Drafts Pull Requests with fixes using GitHub Copilot Agent Mode.
 
 ## Architecture
 
@@ -83,14 +83,33 @@ graph TD
     ```bash
     cd src/Agent200.Host
     dotnet user-secrets init
+    
+    # Azure OpenAI Configuration
     dotnet user-secrets set "AzureOpenAI:Endpoint" "https://YOUR_RES.openai.azure.com/"
     dotnet user-secrets set "AzureOpenAI:Key" "YOUR_KEY"
     dotnet user-secrets set "AzureOpenAI:Deployment" "gpt-4o-mini"
+    
+    # Azure Subscription Details (for MCP)
+    dotnet user-secrets set "Azure:SubscriptionId" "YOUR_SUBSCRIPTION_ID"
+    dotnet user-secrets set "Azure:TenantId" "YOUR_TENANT_ID"
+    
+    # GitHub Integration
+    dotnet user-secrets set "GitHub:Token" "your_actual_github_pat"
     ```
 
 4.  **Run the Agent**
     ```bash
     dotnet run
+    ```
+
+    Agent 200 includes a comprehensive unit test suite to ensure core logic (metric evaluation, tool mapping) and autonomous handoff remains stable.
+    
+    *   **Health Evaluator Tests**: Validates metric parsing for various Azure JSON formats.
+    *   **Watchdog Handoff Tests**: Uses **Moq** and interface-based abstraction (`IMcpClient`) to verify Tier 1 to Tier 2 transitions without requiring live cloud resources.
+
+    ```bash
+    cd src/Agent200.Tests
+    dotnet test
     ```
 
 ## Usage Example
