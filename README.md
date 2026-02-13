@@ -16,18 +16,18 @@ Instead of sending terabytes of logs to a central cloud (expensive), Agent 200 b
 ### Key Features
 
 **Tier 1: Zero-Cost Watchdog**
-*   Runs locally using Phi-3-mini.
+*   Runs locally using Phi-3-mini or rule-based logic.
 *   Polls Azure Monitor metrics 24/7 for free.
-*   Only wakes up the "expensive" cloud agent when an anomaly is detected.
+*   **Intelligent Handoff**: Only wakes up the "expensive" cloud agent when an anomaly (e.g., CPU spike > 50%) is detected.
 
-**Tier 2: Cloud Investigator**
-*   Powered by Azure OpenAI (GPT-4o-mini).
-*   Connects to Azure MCP to read live metrics and resource health.
-*   Connects to GitHub MCP to read CI/CD build logs and commit history.
+**Tier 2: Cloud Investigator (Autonomous RCA)**
+*   Powered by Azure OpenAI (**GPT-4o-mini**).
+*   **Multi-Platform Reasoning**: Connects to Azure MCP (metrics) and GitHub MCP (logs/repo) to correlate platform events with code changes.
+*   **Autonomous Documentation**: Generates a detailed Root Cause Analysis (RCA) report with remediation recommendations.
 
-**Tier 3: The Fixer**
-*   Correlates the infrastructure failure with the specific code commit.
-*   Drafts a Pull Request with the fix using GitHub Copilot Agent Mode.
+**Tier 3: The Fixer (Coming Soon)**
+*   Correlates infrastructure failures with specific code commits.
+*   Drafts Pull Requests with fixes using GitHub Copilot Agent Mode.
 
 ## Architecture
 
@@ -103,7 +103,10 @@ graph TD
     ```
 
 5.  **Running Tests**
-    Agent 200 includes a suite of unit tests to ensure core logic (metric evaluation, tool mapping) remains stable.
+    Agent 200 includes a comprehensive unit test suite to ensure core logic (metric evaluation, tool mapping) and autonomous handoff remains stable.
+    
+    *   **Health Evaluator Tests**: Validates metric parsing for various Azure JSON formats.
+    *   **Watchdog Handoff Tests**: Uses **Moq** and interface-based abstraction (`IMcpClient`) to verify Tier 1 to Tier 2 transitions without requiring live cloud resources.
     ```bash
     cd src/Agent200.Tests
     dotnet test

@@ -11,7 +11,7 @@ namespace Agent200.Host.Services;
 public class HealthEvaluator : IHealthEvaluator
 {
     // Threshold for CPU usage. If exceeded, the system is considered unhealthy.
-    private const double CpuThreshold = 80.0;
+    private const double CpuThreshold = 50.0;
 
     /// <summary>
     /// Checks if the provided tool result indicates a healthy state.

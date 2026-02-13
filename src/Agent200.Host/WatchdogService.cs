@@ -11,21 +11,24 @@ public class WatchdogService : BackgroundService
 {
     private readonly ILogger<WatchdogService> _logger;
     private readonly IConfiguration _config;
-    private readonly McpService _mcpService;
+    private readonly IMcpService _mcpService;
     private readonly IHealthEvaluator _healthEvaluator;
+    private readonly IInvestigatorAgent _investigator;
     
     private const int PollingIntervalSeconds = 60;
 
     public WatchdogService(
         ILogger<WatchdogService> logger, 
         IConfiguration config, 
-        McpService mcpService,
-        IHealthEvaluator healthEvaluator)
+        IMcpService mcpService,
+        IHealthEvaluator healthEvaluator,
+        IInvestigatorAgent investigator)
     {
         _logger = logger;
         _config = config;
         _mcpService = mcpService;
         _healthEvaluator = healthEvaluator;
+        _investigator = investigator;
     }
 
     /// <summary>
@@ -55,7 +58,7 @@ public class WatchdogService : BackgroundService
     /// Core monitoring logic. Connects to the Azure MCP monitor tool to retrieve
     /// CPU usage metrics and passes them to the HealthEvaluator for analysis.
     /// </summary>
-    private async Task CheckMetricsAsync(CancellationToken ct)
+    internal async Task CheckMetricsAsync(CancellationToken ct)
     {
         _logger.LogInformation("🔍 Checking Azure metrics...");
 
@@ -68,7 +71,7 @@ public class WatchdogService : BackgroundService
             return;
         }
 
-        var client = await _mcpService.GetClientAsync(subscription, tenant);
+        var client = await _mcpService.GetAzureClientAsync(subscription, tenant);
         
         // Resource name of the App Service Plan to monitor.
         var targetResource = "asp-cpuspiker-free-central";
@@ -113,7 +116,17 @@ public class WatchdogService : BackgroundService
              }
              else
              {
-                 _logger.LogWarning("🚨 Watchdog: CPU SPIKE DETECTED! System is unhealthy.");
+                 _logger.LogWarning("🚨 Watchdog: CPU SPIKE DETECTED! Triggering Investigator...");
+                 
+                 // TRIGGER TIER 2 HANDOFF:
+                 // The Watchdog (Tier 1) has detected a rule-based anomaly.
+                 // We now "awaken" the Investigator (Tier 2) for autonomous Root Cause Analysis.
+                 // This tiered approach saves cost by only invoking expensive AI reasoning when necessary.
+                 var rcaResponse = await _investigator.InvestigateAnomalyAsync($"CPU spike detected on {targetResource}. Metrics: {logText}");
+                 
+                 _logger.LogInformation("📄 Investigator RCA Output:\n{RCA}", rcaResponse);
+                 
+                 // FUTURE: Tier 3 (Fixer) handoff could be implemented here to automatically draft a PR.
              }
         }
         catch(Exception ex)

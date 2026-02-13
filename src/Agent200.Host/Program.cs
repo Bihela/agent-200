@@ -19,8 +19,9 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Configuration.AddUserSecrets<Program>();
 
 // 1. Configure Services
-builder.Services.AddSingleton<McpService>();
+builder.Services.AddSingleton<IMcpService, McpService>();
 builder.Services.AddSingleton<IHealthEvaluator, HealthEvaluator>();
+builder.Services.AddSingleton<IInvestigatorAgent, InvestigatorAgent>();
 builder.Services.AddHostedService<WatchdogService>();
 
 // 2. Register AI Components
@@ -63,8 +64,8 @@ if (string.IsNullOrEmpty(subscriptionId) || string.IsNullOrEmpty(tenantId))
     return;
 }
 
-var mcpService = host.Services.GetRequiredService<McpService>();
-var azureClient = await mcpService.GetClientAsync(subscriptionId, tenantId);
+var mcpService = host.Services.GetRequiredService<IMcpService>();
+var azureClient = await mcpService.GetAzureClientAsync(subscriptionId, tenantId);
 var aiTools = new List<AITool>();
 
 // Helper to map MCP tools to Semantic Kernel AITool
@@ -72,7 +73,7 @@ var aiTools = new List<AITool>();
 /// Maps an MCP tool to a Microsoft.Extensions.AI AITool.
 /// Uses the McpAIFunction wrapper to ensure the MCP tool's input schema is preserved.
 /// </summary>
-AITool MapToAITool(McpClientTool tool, McpClient client)
+AITool MapToAITool(McpClientTool tool, IMcpClient client)
 {
     // Create the base AI function with a delegate that handles parameter extraction and tool invocation.
     var aiFunc = AIFunctionFactory.Create(async (AIFunctionArguments args, System.Threading.CancellationToken ct) => 
@@ -103,7 +104,7 @@ if (!string.IsNullOrEmpty(githubToken))
     try 
     {
         Console.WriteLine("🔌 Connecting to GitHub...");
-        var githubClient = await mcpService.CreateGitHubClientAsync(githubToken);
+        var githubClient = await mcpService.GetGitHubClientAsync(githubToken);
         var githubToolsResult = await githubClient.ListToolsAsync();
         foreach(var tool in githubToolsResult)
         {
