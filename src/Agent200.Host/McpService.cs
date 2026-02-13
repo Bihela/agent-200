@@ -1,6 +1,9 @@
+using Microsoft.Extensions.AI;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Text.Json;
 
 namespace Agent200.Host;
 
@@ -61,6 +64,37 @@ public async Task<IMcpClient> GetGitHubClientAsync(string githubToken)
 /// <inheritdoc />
 public IEnumerable<IMcpClient> GetActiveClients() => _clients.Values;
 
+/// <inheritdoc />
+public async Task<List<AITool>> GetAIToolsAsync()
+{
+    var aiTools = new List<AITool>();
+    var clients = GetActiveClients();
+
+    foreach (var client in clients)
+    {
+        var tools = await client.ListToolsAsync();
+        foreach (var tool in tools)
+        {
+            aiTools.Add(MapToAITool(tool, client));
+        }
+    }
+    return aiTools;
+}
+
+private AITool MapToAITool(McpClientTool tool, IMcpClient client)
+{
+    var aiFunc = AIFunctionFactory.Create(async (AIFunctionArguments args, System.Threading.CancellationToken ct) => 
+    {
+        var dict = args.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+        var result = await client.CallToolAsync(tool.Name, new ReadOnlyDictionary<string, object?>(dict), null, null, ct);
+        
+        var outputs = result.Content.Select(c => c is TextContentBlock t ? t.Text : c.ToString());
+        return string.Join("\n", outputs);
+    }, tool.Name, tool.Description);
+
+    return new McpAIFunction(aiFunc, tool.ProtocolTool.InputSchema);
+}
+
 /// <summary>
 /// Shuts down all active MCP clients and releases underlying OS resources.
 /// </summary>
@@ -97,4 +131,18 @@ public StdioClientTransportOptions CreateGitHubClientTransportOptions(string git
         }
     };
 }
+}
+
+/// <summary>
+/// A wrapper for AIFunction that allows overriding the JsonSchema.
+/// </summary>
+internal class McpAIFunction : DelegatingAIFunction
+{
+    public McpAIFunction(AIFunction innerFunction, JsonElement jsonSchema)
+        : base(innerFunction)
+    {
+        JsonSchema = jsonSchema;
+    }
+
+    public override JsonElement JsonSchema { get; }
 }

@@ -25,9 +25,10 @@ Instead of sending terabytes of logs to a central cloud (expensive), Agent 200 b
 *   **Multi-Platform Reasoning**: Connects to Azure MCP (metrics) and GitHub MCP (logs/repo) to correlate platform events with code changes.
 *   **Autonomous Documentation**: Generates a detailed Root Cause Analysis (RCA) report with remediation recommendations.
 
-**Tier 3: The Fixer (Coming Soon)**
-*   Correlates infrastructure failures with specific code commits.
-*   Drafts Pull Requests with fixes using GitHub Copilot Agent Mode.
+**Tier 3: The Fixer (Beta)**
+*   Correlates infrastructure analysis with source code.
+*   **Automated Remediation**: Drafts Pull Requests with fixes using GitHub Copilot Agent Mode logic.
+*   **Human-in-the-Loop**: Creates a PR for review, never merges automatically.
 
 ## Architecture
 
@@ -121,7 +122,8 @@ graph TD
 3.  **Azure MCP** reports: *"Resource health is degraded. Last deployment failed."*
 4.  **Agent 200** queries GitHub MCP: *"Get logs for the last failed run."*
 5.  **Agent 200** identifies: *"Error: NullReferenceException in UserService.cs line 42."*
-6.  **Agent 200** proposes a fix: *"Apply null check to UserService.cs."*
+6.  **Agent 200 (Fixer)** takes action: *"Creating a fix branch and applying null check."*
+7.  **Agent 200** outputs: *"Pull Request #5 created for your review."*
 
 ## Built With
 *   **Orchestration:** [Microsoft Agent Framework](https://github.com/microsoft/agent-framework)

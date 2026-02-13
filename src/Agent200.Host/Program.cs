@@ -22,6 +22,7 @@ builder.Configuration.AddUserSecrets<Program>();
 builder.Services.AddSingleton<IMcpService, McpService>();
 builder.Services.AddSingleton<IHealthEvaluator, HealthEvaluator>();
 builder.Services.AddSingleton<IInvestigatorAgent, InvestigatorAgent>();
+builder.Services.AddSingleton<IFixerAgent, FixerAgent>();
 builder.Services.AddHostedService<WatchdogService>();
 
 // 2. Register AI Components
@@ -64,67 +65,36 @@ if (string.IsNullOrEmpty(subscriptionId) || string.IsNullOrEmpty(tenantId))
     return;
 }
 
-var mcpService = host.Services.GetRequiredService<IMcpService>();
-var azureClient = await mcpService.GetAzureClientAsync(subscriptionId, tenantId);
-var aiTools = new List<AITool>();
+Microsoft.Extensions.AI.IChatClient agentClient = null;
+List<Microsoft.Extensions.AI.AITool> aiTools = new List<Microsoft.Extensions.AI.AITool>();
 
-// Helper to map MCP tools to Semantic Kernel AITool
-/// <summary>
-/// Maps an MCP tool to a Microsoft.Extensions.AI AITool.
-/// Uses the McpAIFunction wrapper to ensure the MCP tool's input schema is preserved.
-/// </summary>
-AITool MapToAITool(McpClientTool tool, IMcpClient client)
+try 
 {
-    // Create the base AI function with a delegate that handles parameter extraction and tool invocation.
-    var aiFunc = AIFunctionFactory.Create(async (AIFunctionArguments args, System.Threading.CancellationToken ct) => 
+    var mcpService = host.Services.GetRequiredService<IMcpService>();
+    var azureClient = await mcpService.GetAzureClientAsync(subscriptionId, tenantId);
+
+    // Add GitHub client if token is present
+    var githubToken = config["GitHub:Token"];
+    if (!string.IsNullOrEmpty(githubToken))
     {
-        var dict = args.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-        var result = await client.CallToolAsync(tool.Name, new ReadOnlyDictionary<string, object?>(dict), null, null, ct);
-        
-        // Collate and return the tool's text output.
-        var outputs = result.Content.Select(c => c is TextContentBlock t ? t.Text : c.ToString());
-        return string.Join("\n", outputs);
-    }, tool.Name, tool.Description);
-
-    // Wrap the base function in McpAIFunction to override the schema metadata with the official MCP schema.
-    return new McpAIFunction(aiFunc, tool.ProtocolTool.InputSchema);
-}
-
-// 1. Add Azure Tools
-var azureTools = await azureClient.ListToolsAsync();
-foreach(var tool in azureTools) 
-{
-    aiTools.Add(MapToAITool(tool, azureClient));
-}
-
-// 2. Add GitHub Tools (if configured)
-var githubToken = config["GitHub:Token"];
-if (!string.IsNullOrEmpty(githubToken))
-{
-    try 
-    {
-        Console.WriteLine("🔌 Connecting to GitHub...");
-        var githubClient = await mcpService.GetGitHubClientAsync(githubToken);
-        var githubToolsResult = await githubClient.ListToolsAsync();
-        foreach(var tool in githubToolsResult)
-        {
-             aiTools.Add(MapToAITool(tool, githubClient));
-        }
+        await mcpService.GetGitHubClientAsync(githubToken);
     }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"⚠️ Failed to connect to GitHub: {ex.Message}");
-        Console.WriteLine($"[Stack Trace]: {ex.StackTrace}");
-    }
-}
-else
-{
-    Console.WriteLine("⚠️ GitHub Token not found. Skipping GitHub tools.");
-}
 
-var agentClient = chatClient.AsBuilder()
-   .UseFunctionInvocation()
-   .Build();
+    // 4. Aggregate all tools from all clients
+    aiTools = await mcpService.GetAIToolsAsync();
+
+    agentClient = chatClient.AsBuilder()
+       .UseFunctionInvocation()
+       .Build();
+}
+catch (Exception ex)
+{
+    Console.ForegroundColor = ConsoleColor.Red;
+    Console.WriteLine($"[CRITICAL STARTUP ERROR]: {ex.GetType().Name}: {ex.Message}");
+    Console.WriteLine(ex.StackTrace);
+    Console.ResetColor();
+    return;
+}
 
 var systemPrompt = $@"You are an Azure expert assistant. You MUST use the provided tools to fetch real data. 
 CLIENT CONTEXT:
@@ -166,19 +136,3 @@ while (true)
 }
 
 await host.StopAsync();
-
-/// <summary>
-/// A wrapper for AIFunction that allows overriding the JsonSchema.
-/// This is used to pass the correct schema from MCP tools to the AI model,
-/// ensuring that required parameters (like 'query' or 'repo') are correctly inferred by the model.
-/// </summary>
-class McpAIFunction : DelegatingAIFunction
-{
-    public McpAIFunction(AIFunction innerFunction, System.Text.Json.JsonElement jsonSchema)
-        : base(innerFunction)
-    {
-        JsonSchema = jsonSchema;
-    }
-
-    public override System.Text.Json.JsonElement JsonSchema { get; }
-}
