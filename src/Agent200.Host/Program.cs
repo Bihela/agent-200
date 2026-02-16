@@ -12,6 +12,9 @@ using ModelContextProtocol.Protocol;
 using McpDotNet.Extensions.AI;
 using Agent200.Host;
 using Agent200.Host.Services;
+using OpenTelemetry;
+using OpenTelemetry.Trace;
+using Azure.Monitor.OpenTelemetry.Exporter;
 
 // --------------------------------------------------------------------------------
 // Agent 200: Autonomous SRE Host (Entry Point)
@@ -27,6 +30,25 @@ builder.Services.AddSingleton<IHealthEvaluator, HealthEvaluator>();
 builder.Services.AddSingleton<IInvestigatorAgent, InvestigatorAgent>();
 builder.Services.AddSingleton<IFixerAgent, FixerAgent>();
 builder.Services.AddHostedService<WatchdogService>();
+
+// --------------------------------------------------------------------------------
+// 0. OpenTelemetry Configuration
+// --------------------------------------------------------------------------------
+var otelConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"];
+
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(r => r.AddService("Agent200"))
+    .WithTracing(tracing =>
+    {
+        tracing.AddSource("Agent200.AI");
+        tracing.AddSource("Microsoft.Extensions.AI");
+        tracing.AddHttpClientInstrumentation();
+        
+        if (!string.IsNullOrEmpty(otelConnectionString))
+        {
+            tracing.AddAzureMonitorTraceExporter(o => o.ConnectionString = otelConnectionString);
+        }
+    });
 
 // --------------------------------------------------------------------------------
 // 1. Dependency Injection Configuration
@@ -50,8 +72,9 @@ builder.Services.AddSingleton<IChatClient>(sp => {
 
     var sensitiveTools = new[] { "create_branch", "create_or_update_file", "create_pull_request", "push_files" };
 
-    // We use AsBuilder() to wrap the core client with our HITL governance logic.
+    // We use AsBuilder() to wrap the core client with our HITL governance logic and Telemetry.
     return client.AsBuilder()
+        .UseOpenTelemetry(sourceName: "Agent200.AI") // Enabled with explicit source name
         .Use(inner => new HumanInTheLoopChatClient(inner, sensitiveTools, loggerFactory.CreateLogger<HumanInTheLoopChatClient>()))
         .Build();
 });
@@ -62,6 +85,7 @@ var config = host.Services.GetRequiredService<IConfiguration>();
 var logger = host.Services.GetRequiredService<ILogger<Program>>();
 logger.LogInformation("[Host] Agent 200 Host started.");
 
+// --------------------------------------------------------------------------------
 // 3. Setup Interactive Agent capability
 await host.StartAsync();
 
