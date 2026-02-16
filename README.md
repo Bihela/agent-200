@@ -29,6 +29,7 @@ Instead of sending terabytes of logs to a central cloud (expensive), Agent 200 b
 *   Correlates infrastructure analysis with source code to apply fixes.
 *   **Automated Remediation**: Drafts Pull Requests with fixes targeting the root cause identified by the Investigator.
 *   **Human-in-the-Loop Governance**: A mandatory safety gate intercepts sensitive actions (PR creation, file edits) and requires explicit human approval via the terminal.
+*   **Enterprise Observability**: Native OpenTelemetry integration using `Microsoft.Extensions.AI` and `Azure.Monitor.OpenTelemetry.Exporter`, enabling deep tracing of agent reasoning and performance in Azure Application Insights.
 *   **Professional Interface**: Zero-clutter console output with standardized `[Host]`, `[Watchdog]`, and `[HITL]` prefixes for enterprise-readiness.
 *   **Safety First**: Always creates a PR for review, never merges automatically.
 
