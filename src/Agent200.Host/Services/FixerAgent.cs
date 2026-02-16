@@ -12,6 +12,9 @@ namespace Agent200.Host.Services;
 /// </summary>
 public class FixerAgent : IFixerAgent
 {
+    // Developer Note: The Fixer Agent is the most powerful agent in the system as 
+    // it has Write access to the repository. It is always guarded by the 
+    // HumanInTheLoopChatClient in production scenarios.
     private readonly IChatClient _chatClient;
     private readonly IMcpService _mcpService;
     private readonly ILoggerFactory _loggerFactory;
@@ -39,7 +42,7 @@ public class FixerAgent : IFixerAgent
 CRITICAL INSTRUCTIONS:
 1. READ THE RCA: Carefully analyze the Root Cause Analysis provided.
 2. USE GITHUB TOOLS: You have access to GitHub MCP tools. 
-3. CREATE A BRANCH: Always create a new branch for your fix (e.g., 'fix/cpu-spike-remediation').
+3. CREATE A BRANCH: Always create a new branch for your fix. Use a descriptive name with a unique suffix (e.g., 'fix/cpu-spike-XYZ').
 4. COMMIT THE FIX: Use 'create_or_update_file' to apply code or configuration changes.
 5. OPEN A PULL REQUEST: Use 'create_pull_request' to propose the fix against the 'main' branch.
 6. DO NOT MERGE: Your responsibility ends at creating the PR. A human must review and merge.
@@ -73,7 +76,7 @@ Your output should be a summary of the PR you created.";
     /// <returns>A summary of the actions taken (e.g., PR link).</returns>
     public async Task<string> RemediateAsync(string rcaReport)
     {
-        _logger.LogInformation("🛠️ Fixer Agent: Starting remediation based on RCA...");
+        _logger.LogInformation("[Fixer] Agent: Starting remediation based on RCA...");
 
         var agent = AsAgent();
         var aiTools = await _mcpService.GetAIToolsAsync();

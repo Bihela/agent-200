@@ -15,6 +15,8 @@ namespace Agent200.Host.Services;
 /// </summary>
 public class InvestigatorAgent : IInvestigatorAgent
 {
+    // Developer Note: This agent uses the Microsoft Agent Framework (ChatClientAgent) 
+    // to correlate events between different platforms (Azure and GitHub).
     private readonly ILogger<InvestigatorAgent> _logger;
     private readonly IChatClient _chatClient;
     private readonly IMcpService _mcpService;
@@ -69,7 +71,7 @@ CRITICAL: Always pass 'subscription' and 'tenant' to Azure tools.";
     /// </summary>
     public async Task<string> InvestigateAnomalyAsync(string anomalyDescription)
     {
-        _logger.LogInformation("🕵️ Investigator Agent awakening to investigate: {Anomaly}", anomalyDescription);
+        _logger.LogInformation("[Investigator] Agent awakening to investigate: {Anomaly}", anomalyDescription);
 
         var agent = AsAgent();
         var allTools = await _mcpService.GetAIToolsAsync();
@@ -79,7 +81,7 @@ CRITICAL: Always pass 'subscription' and 'tenant' to Azure tools.";
         try 
         {
             var response = await agent.RunAsync(anomalyDescription, options: runOptions);
-            _logger.LogInformation("✅ Investigation complete.");
+            _logger.LogInformation("[Investigator] Investigation complete.");
             return response.Text ?? "No root cause identified.";
         }
         catch (Exception ex)
