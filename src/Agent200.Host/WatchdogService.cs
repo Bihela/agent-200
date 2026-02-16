@@ -10,6 +10,12 @@ using System.Collections.ObjectModel;
 
 namespace Agent200.Host.Services;
 
+/// <summary>
+/// The Watchdog Service is the "Tier 1" agent. It runs continuously in the background,
+/// low-cost monitoring for system anomalies (e.g., CPU spikes).
+/// When an anomaly is found, it orchestrates the transition to "Tier 2" (Investigator)
+/// and "Tier 3" (Fixer).
+/// </summary>
 public class WatchdogService : BackgroundService
 {
     private readonly ILogger<WatchdogService> _logger;
@@ -19,7 +25,7 @@ public class WatchdogService : BackgroundService
     private readonly IInvestigatorAgent _investigator;
     private readonly IFixerAgent _fixer;
     
-    private const int PollingIntervalSeconds = 60;
+    private const int PollingIntervalSeconds = 10;
 
     public WatchdogService(
         ILogger<WatchdogService> logger, 
@@ -43,7 +49,8 @@ public class WatchdogService : BackgroundService
     /// </summary>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("🐶 Watchdog Service starting...");
+        // Start the background polling loop.
+        _logger.LogInformation("[Watchdog] Service starting...");
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -66,14 +73,14 @@ public class WatchdogService : BackgroundService
     /// </summary>
     internal async Task CheckMetricsAsync(CancellationToken ct)
     {
-        _logger.LogInformation("🔍 Checking Azure metrics...");
+        _logger.LogInformation("[Watchdog] Checking Azure metrics...");
 
         var tenant = _config["Azure:TenantId"];
         var subscription = _config["Azure:SubscriptionId"];
         
         if (string.IsNullOrEmpty(tenant) || string.IsNullOrEmpty(subscription))
         {
-            _logger.LogWarning("⚠️ Azure:TenantId or Azure:SubscriptionId missing in config. Skipping metrics check.");
+            _logger.LogWarning("[Watchdog] Azure:TenantId or Azure:SubscriptionId missing in config. Skipping metrics check.");
             return;
         }
 
@@ -111,18 +118,18 @@ public class WatchdogService : BackgroundService
              
              // Log the first 500 characters of the response for debugging purposes.
              var logText = text.Length > 500 ? text.Substring(0, 500) + "..." : text;
-             _logger.LogInformation($"📊 Metric Response (first 500 chars):\n{logText}");
+             _logger.LogInformation($"[Watchdog] Metric Response (first 500 chars):\n{logText}");
 
              // Evaluate health based on the metric result.
              bool isHealthy = _healthEvaluator.IsHealthy(result, targetResource);
              
              if (isHealthy)
              {
-                 _logger.LogInformation("✅ Watchdog: System is healthy.");
+                 _logger.LogInformation("[Watchdog] System is healthy.");
              }
              else
              {
-                  _logger.LogWarning("🚨 Watchdog: CPU SPIKE DETECTED! Awakening Tier 2 (Investigator) and Tier 3 (Fixer) via Agent Workflow...");
+                  _logger.LogWarning("[Watchdog] CPU SPIKE DETECTED! Awakening Tier 2 (Investigator) and Tier 3 (Fixer) via Agent Workflow...");
                   
                   // TRIGGER MULTI-AGENT WORKFLOW:
                   // 1. Investigator evaluates Root Cause (RCA).
@@ -136,22 +143,23 @@ public class WatchdogService : BackgroundService
                   // 1. Investigator Agent: Analyze Root Cause
                   //    - Takes the raw metric data and anomaly description.
                   //    - Outputs a detailed RCA report.
-                  _logger.LogInformation("🕵️ Starting Investigation...");
+                  _logger.LogInformation("[Watchdog] Starting Investigation...");
                   string rcaReport = await _investigator.InvestigateAnomalyAsync($"Anomaly detected: CPU spike on {targetResource}. Metrics: {logText}");
-                  _logger.LogInformation($"✅ Investigation Complete. RCA: {rcaReport}");
+                  _logger.LogInformation($"[Watchdog] Investigation Complete. RCA: {rcaReport}");
 
                   // 2. Fixer Agent: Apply Remediation (if RCA is valid)
                   //    - Only triggers if the Investigator found a plausible root cause.
                   //    - Uses the RCA to determine the correct fix (e.g., revert commit, update config).
+                  //    - This is the Tier 3 agent that performs autonomous "writes" to GitHub.
                   if (!string.IsNullOrWhiteSpace(rcaReport) && !rcaReport.Contains("No root cause identified"))
                   {
-                      _logger.LogInformation("🛠️ Starting Remediation...");
+                      _logger.LogInformation("[Watchdog] Starting Remediation...");
                       string remediationSummary = await _fixer.RemediateAsync(rcaReport);
-                      _logger.LogInformation($"✅ Remediation Complete. Summary: {remediationSummary}");
+                      _logger.LogInformation($"[Watchdog] Remediation Complete. Summary: {remediationSummary}");
                   }
                   else
                   {
-                      _logger.LogWarning("⚠️ Skipping Remediation: No valid root cause identified.");
+                      _logger.LogWarning("[Watchdog] Skipping Remediation: No valid root cause identified.");
                   }
               }
         }

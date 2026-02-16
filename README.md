@@ -25,10 +25,12 @@ Instead of sending terabytes of logs to a central cloud (expensive), Agent 200 b
 *   **Multi-Platform Reasoning**: Connects to Azure MCP (metrics) and GitHub MCP (logs/repo) to correlate platform events with code changes.
 *   **Autonomous Documentation**: Generates a detailed Root Cause Analysis (RCA) report with remediation recommendations.
 
-**Tier 3: The Fixer (Beta)**
-*   Correlates infrastructure analysis with source code.
-*   **Automated Remediation**: Drafts Pull Requests with fixes using GitHub Copilot Agent Mode logic.
-*   **Human-in-the-Loop**: Creates a PR for review, never merges automatically.
+**Tier 3: The Fixer (Autonomous Remediation)**
+*   Correlates infrastructure analysis with source code to apply fixes.
+*   **Automated Remediation**: Drafts Pull Requests with fixes targeting the root cause identified by the Investigator.
+*   **Human-in-the-Loop Governance**: A mandatory safety gate intercepts sensitive actions (PR creation, file edits) and requires explicit human approval via the terminal.
+*   **Professional Interface**: Zero-clutter console output with standardized `[Host]`, `[Watchdog]`, and `[HITL]` prefixes for enterprise-readiness.
+*   **Safety First**: Always creates a PR for review, never merges automatically.
 
 ## Architecture
 

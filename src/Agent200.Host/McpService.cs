@@ -7,8 +7,14 @@ using System.Text.Json;
 
 namespace Agent200.Host;
 
+/// <summary>
+/// McpService manages the lifecycle of Model Context Protocol (MCP) clients.
+/// It is responsible for spawning MCP server processes via stdio and aggregating
+/// their tools into a format compatible with Microsoft.Extensions.AI.
+/// </summary>
 public class McpService : IMcpService
 {
+    // Caches active clients to avoid redundant process spawning.
     private readonly Dictionary<string, IMcpClient> _clients = new();
     private readonly List<StdioClientTransport> _transports = new();
 
@@ -38,7 +44,7 @@ public async Task<IMcpClient> GetAzureClientAsync(string subscriptionId, string 
     _transports.Add(transport);
     _clients[key] = wrapper;
 
-    Console.WriteLine("🔌 Connected to Azure MCP Server");
+    Console.WriteLine("[MCP] Connected to Azure MCP Server");
     return wrapper;
 }
 
@@ -57,7 +63,7 @@ public async Task<IMcpClient> GetGitHubClientAsync(string githubToken)
     _transports.Add(transport);
     _clients[key] = wrapper;
 
-    Console.WriteLine("🔌 Connected to GitHub MCP Server (via npx)");
+    Console.WriteLine("[MCP] Connected to GitHub MCP Server (via npx)");
     return wrapper;
 }
 
@@ -81,7 +87,11 @@ public async Task<List<AITool>> GetAIToolsAsync()
     return aiTools;
 }
 
-private AITool MapToAITool(McpClientTool tool, IMcpClient client)
+    /// <summary>
+    /// Maps a raw MCP tool definition to a Microsoft.Extensions.AI AITool.
+    /// This includes handling parameter schema mappings to ensure LLM compatibility.
+    /// </summary>
+    private AITool MapToAITool(McpClientTool tool, IMcpClient client)
 {
     var aiFunc = AIFunctionFactory.Create(async (AIFunctionArguments args, System.Threading.CancellationToken ct) => 
     {

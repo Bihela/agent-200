@@ -13,6 +13,9 @@ using McpDotNet.Extensions.AI;
 using Agent200.Host;
 using Agent200.Host.Services;
 
+// --------------------------------------------------------------------------------
+// Agent 200: Autonomous SRE Host (Entry Point)
+// --------------------------------------------------------------------------------
 var builder = Host.CreateApplicationBuilder(args);
 
 // Ensure User Secrets are loaded
@@ -25,43 +28,60 @@ builder.Services.AddSingleton<IInvestigatorAgent, InvestigatorAgent>();
 builder.Services.AddSingleton<IFixerAgent, FixerAgent>();
 builder.Services.AddHostedService<WatchdogService>();
 
-// 2. Register AI Components
-var config = builder.Configuration;
-var endpointString = config["AzureOpenAI:Endpoint"];
-var key = config["AzureOpenAI:Key"];
-var deploymentName = config["AzureOpenAI:Deployment"] ?? "gpt-4o-mini";
+// --------------------------------------------------------------------------------
+// 1. Dependency Injection Configuration
+// --------------------------------------------------------------------------------
+builder.Services.AddSingleton<IChatClient>(sp => {
+    var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    
+    var endpoint = configuration["AzureOpenAI:Endpoint"];
+    var key = configuration["AzureOpenAI:Key"];
+    var deployment = configuration["AzureOpenAI:Deployment"] ?? "gpt-4o-mini";
 
-if (string.IsNullOrEmpty(endpointString) || string.IsNullOrEmpty(key))
-{
-    Console.ForegroundColor = ConsoleColor.Red;
-    Console.WriteLine("Error: Missing Configuration (AzureOpenAI).");
-    return;
-}
+    if (string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(key))
+    {
+        throw new InvalidOperationException("Missing Configuration (AzureOpenAI).");
+    }
 
-IChatClient chatClient = new AzureOpenAIClient(new Uri(endpointString!), new System.ClientModel.ApiKeyCredential(key!))
-   .GetChatClient(deploymentName)
-   .AsIChatClient();
+    var client = new AzureOpenAIClient(new Uri(endpoint), new System.ClientModel.ApiKeyCredential(key))
+       .GetChatClient(deployment)
+       .AsIChatClient();
 
-builder.Services.AddSingleton(chatClient);
+    var sensitiveTools = new[] { "create_branch", "create_or_update_file", "create_pull_request", "push_files" };
+
+    // We use AsBuilder() to wrap the core client with our HITL governance logic.
+    return client.AsBuilder()
+        .Use(inner => new HumanInTheLoopChatClient(inner, sensitiveTools, loggerFactory.CreateLogger<HumanInTheLoopChatClient>()))
+        .Build();
+});
 
 var host = builder.Build();
 
+var config = host.Services.GetRequiredService<IConfiguration>();
 var logger = host.Services.GetRequiredService<ILogger<Program>>();
-logger.LogInformation("🚀 Agent 200 Host started.");
+logger.LogInformation("[Host] Agent 200 Host started.");
 
 // 3. Setup Interactive Agent capability
 await host.StartAsync();
 
-Console.WriteLine("\n🚀 Agent 200 Host Started.");
-Console.WriteLine("🐶 Watchdog is monitoring in the background.");
-Console.WriteLine("💬 You can still talk to the agent below.\n");
+// --------------------------------------------------------------------------------
+// 2. Interactive Agent Capability
+// --------------------------------------------------------------------------------
+// After the host starts and the background Watchdog is running, we enter an 
+// interactive loop that allows a human to chat directly with the "Investigator" 
+// capabilities of Agent 200.
+// --------------------------------------------------------------------------------
+Console.WriteLine("\n[Host] Agent 200 Host Started.");
+Console.WriteLine("[Host] Watchdog is monitoring in the background.");
+Console.WriteLine("[Host] You can still talk to the agent below.\n");
 
 var subscriptionId = config["Azure:SubscriptionId"];
 var tenantId = config["Azure:TenantId"];
 
 if (string.IsNullOrEmpty(subscriptionId) || string.IsNullOrEmpty(tenantId))
 {
-    Console.WriteLine("⚠️ Azure:SubscriptionId or Azure:TenantId is missing in configuration.");
+    Console.WriteLine("[Host] Azure:SubscriptionId or Azure:TenantId is missing in configuration.");
     return;
 }
 
@@ -71,7 +91,8 @@ List<Microsoft.Extensions.AI.AITool> aiTools = new List<Microsoft.Extensions.AI.
 try 
 {
     var mcpService = host.Services.GetRequiredService<IMcpService>();
-    var azureClient = await mcpService.GetAzureClientAsync(subscriptionId, tenantId);
+    var chatClient = host.Services.GetRequiredService<IChatClient>();
+    var azureClient = await mcpService.GetAzureClientAsync(subscriptionId!, tenantId!);
 
     // Add GitHub client if token is present
     var githubToken = config["GitHub:Token"];
