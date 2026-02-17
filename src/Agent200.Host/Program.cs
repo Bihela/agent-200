@@ -13,6 +13,7 @@ using McpDotNet.Extensions.AI;
 using Agent200.Host;
 using Agent200.Host.Services;
 using OpenTelemetry;
+using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Azure.Monitor.OpenTelemetry.Exporter;
 
@@ -152,13 +153,21 @@ CRITICAL INSTRUCTIONS:
 3. For GitHub, use the provided tools to inspect repositories and workflows.
 4. Do not make up data.";
 
-while (true)
-{
-    Console.ForegroundColor = ConsoleColor.Cyan;
-    Console.Write("USER: ");
-    Console.ResetColor();
-    var input = Console.ReadLine();
-    if (string.IsNullOrEmpty(input) || input == "exit") break;
+    var isContainer = config["DOTNET_RUNNING_IN_CONTAINER"] == "true";
+    if (isContainer)
+    {
+        Console.WriteLine("[Host] Container mode detected. Standing by...");
+        await host.WaitForShutdownAsync();
+        return;
+    }
+
+    while (true)
+    {
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.Write("USER: ");
+        Console.ResetColor();
+        var input = Console.ReadLine();
+        if (string.IsNullOrEmpty(input) || input == "exit") break;
 
     try 
     {
