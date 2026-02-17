@@ -21,10 +21,10 @@ jobs:
           dotnet-version: '9.0.x'
 
       - name: Restore Dependencies
-        run: dotnet restore
+        run: dotnet restore src/Agent200.sln
 
       - name: Build
-        run: dotnet build --configuration Release --no-restore
+        run: dotnet build src/Agent200.sln --configuration Release --no-restore
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
