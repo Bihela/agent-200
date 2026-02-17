@@ -1,0 +1,19 @@
+# .dockerignore
+**/.git
+**/.github
+**/.vscode
+**/bin
+**/obj
+**/test-results
+**/out
+**/.env
+**/.user-secrets
+**/secrets.json
+Dockerfile
+.dockerignore
+azure-deployment.yaml
+README.md
+task.md
+walkthrough.md
+node_modules
+npm-debug.log

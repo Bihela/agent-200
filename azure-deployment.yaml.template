@@ -1,0 +1,51 @@
+# Azure Container App Deployment Manifest for Agent 200
+# This file defines the container app, its environment variables, and its scale settings.
+
+location: eastus
+name: agent200-host
+resourceGroup: rg-opsweaver-hackathon
+type: Microsoft.App/containerApps
+
+properties:
+  managedEnvironmentId: {{AZURE_ENVIRONMENT_ID}}
+  configuration:
+    activeRevisionsMode: Single
+    ingress: null
+    registries:
+      - server: {{ACR_SERVER}}
+        username: {{ACR_USERNAME}}
+        passwordSecretRef: acr-password
+    secrets:
+      - name: acr-password
+        value: {{ACR_PASSWORD}}
+      - name: openai-key
+        value: {{AZURE_OPENAI_KEY}}
+      - name: github-token
+        value: {{GITHUB_TOKEN}}
+      - name: ai-connection-string
+        value: {{AI_CONNECTION_STRING}}
+  template:
+    containers:
+      - image: {{ACR_SERVER}}/agent200-host:latest
+        name: agent200-host
+        env:
+          - name: AzureOpenAI__Key
+            secretRef: openai-key
+          - name: AzureOpenAI__Endpoint
+            value: {{AZURE_OPENAI_ENDPOINT}}
+          - name: AzureOpenAI__Deployment
+            value: {{AZURE_OPENAI_DEPLOYMENT}}
+          - name: GitHub__Token
+            secretRef: github-token
+          - name: Azure__SubscriptionId
+            value: {{AZURE_SUBSCRIPTION_ID}}
+          - name: Azure__TenantId
+            value: {{AZURE_TENANT_ID}}
+          - name: ApplicationInsights__ConnectionString
+            secretRef: ai-connection-string
+        resources:
+          cpu: 0.5
+          memory: 1.0Gi
+    scale:
+      minReplicas: 1
+      maxReplicas: 1

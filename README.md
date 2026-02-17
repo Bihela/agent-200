@@ -30,6 +30,7 @@ Instead of sending terabytes of logs to a central cloud (expensive), Agent 200 b
 *   **Automated Remediation**: Drafts Pull Requests with fixes targeting the root cause identified by the Investigator.
 *   **Human-in-the-Loop Governance**: A mandatory safety gate intercepts sensitive actions (PR creation, file edits) and requires explicit human approval via the terminal.
 *   **Enterprise Observability**: Native OpenTelemetry integration using `Microsoft.Extensions.AI` and `Azure.Monitor.OpenTelemetry.Exporter`, enabling deep tracing of agent reasoning and performance in Azure Application Insights.
+*   **Cloud-Native Deployment**: Dockerized background service running on **Azure Container Apps** with **Azure Container Registry** for enterprise scale and 24/7 autonomous monitoring.
 *   **Professional Interface**: Zero-clutter console output with standardized `[Host]`, `[Watchdog]`, and `[HITL]` prefixes for enterprise-readiness.
 *   **Safety First**: Always creates a PR for review, never merges automatically.
 
@@ -115,6 +116,9 @@ graph TD
     cd src/Agent200.Tests
     dotnet test
     ```
+
+## 🚀 Hackathon Quick Start (Judges)
+For judges wanting to test the cloud-native capabilities, please refer to the dedicated **[Judge's Guide](JUDGES_GUIDE.md)** for a streamlined setup and deployment walkthrough.
 
 ## Usage Example
 
