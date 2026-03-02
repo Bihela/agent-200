@@ -161,6 +161,7 @@ CRITICAL INSTRUCTIONS:
         return;
     }
 
+/*
     while (true)
     {
         Console.ForegroundColor = ConsoleColor.Cyan;
@@ -188,5 +189,6 @@ CRITICAL INSTRUCTIONS:
         Console.WriteLine($"[Error]: {ex.Message}");
     }
 }
+*/
 
 await host.StopAsync();

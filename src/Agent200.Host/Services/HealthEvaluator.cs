@@ -19,11 +19,6 @@ public class HealthEvaluator : IHealthEvaluator
     /// </summary>
     public bool IsHealthy(CallToolResult toolResult, string targetResourceName)
     {
-        // DEBUG: Force unhealthy for testing the workflow
-        if (targetResourceName.Contains("cpuspiker"))
-        {
-            return false;
-        }
 
         if (toolResult == null || toolResult.Content == null)
         {

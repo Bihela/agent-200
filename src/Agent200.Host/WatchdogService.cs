@@ -25,7 +25,7 @@ public class WatchdogService : BackgroundService
     private readonly IInvestigatorAgent _investigator;
     private readonly IFixerAgent _fixer;
     
-    private const int PollingIntervalSeconds = 10;
+    private const int PollingIntervalSeconds = 20; // For Demo (Safe from rate limits)
 
     public WatchdogService(
         ILogger<WatchdogService> logger, 
@@ -56,7 +56,14 @@ public class WatchdogService : BackgroundService
         {
             try
             {
-                await CheckMetricsAsync(stoppingToken);
+                if (_config["Watchdog:Enabled"]?.ToLower() == "false")
+                {
+                    _logger.LogInformation("[Watchdog] Service is disabled via configuration.");
+                }
+                else
+                {
+                    await CheckMetricsAsync(stoppingToken);
+                }
             }
             catch (Exception ex)
             {
