@@ -25,7 +25,7 @@ public class WatchdogService : BackgroundService
     private readonly IInvestigatorAgent _investigator;
     private readonly IFixerAgent _fixer;
     
-    private const int PollingIntervalSeconds = 60; // Increased to 60s for demo safety
+    private const int PollingIntervalSeconds = 300; // Default polling interval
 
     public WatchdogService(
         ILogger<WatchdogService> logger, 
@@ -148,9 +148,8 @@ public class WatchdogService : BackgroundService
                   // (specifically with HandoffsWorkflowBuilder), we are manually orchestrating the agent loop here.
                   // 
                   // 1. Investigator Agent: Analyze Root Cause
-                  _logger.LogInformation("[Watchdog] Waiting 5s for quota reset...");
-                  await Task.Delay(5000, ct); // Safety delay for 429 prevention
-                  
+                  //    - Takes the raw metric data and anomaly description.
+                  //    - Outputs a detailed RCA report.
                   _logger.LogInformation("[Watchdog] Starting Investigation...");
                   string rcaReport = await _investigator.InvestigateAnomalyAsync($"Anomaly detected: CPU spike on {targetResource}. Metrics: {logText}");
                   _logger.LogInformation($"[Watchdog] Investigation Complete. RCA: {rcaReport}");

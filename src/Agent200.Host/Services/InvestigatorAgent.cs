@@ -43,19 +43,20 @@ public class InvestigatorAgent : IInvestigatorAgent
         // Construct the system prompt with dynamic context (Subscription, Tenant, Repo).
         // This ensures the LLM knows exactly which environment to investigate without hallucinating resource IDs.
 
-        var systemPrompt = $@"You are a Senior SRE Investigator. Find the root cause of the CPU spike.
- 
-STEPS:
-1. Confirm the spike with 'monitor_metrics_query'.
-2. List recent commits with 'list_commits'.
-3. Output a 1-paragraph 'ROOT CAUSE ANALYSIS'.
- 
+        var systemPrompt = $@"You are a Senior SRE Investigator. Your goal is to find the ROOT CAUSE of the following anomaly.
+
+STEPS TO FOLLOW:
+1. Examine Azure resources in the 'rg-opsweaver-hackathon' group to see if any deployments or configuration changes occurred.
+2. Search the GitHub repository for recent commits or failed Action workflows that align with the anomaly timing.
+3. Fetch logs from failed workflows if possible.
+4. Output a clear, concise 'ROOT CAUSE ANALYSIS' report.
+
 Azure Context:
-- Sub: {subscriptionId}
+- Subscription: {subscriptionId}
 - Tenant: {tenantId}
-- Repo: Bihela/opsweaver-test-ground
- 
-CRITICAL: Use ONLY provided tools. Be extremely concise.";
+- GitHub Repository: Bihela/opsweaver-test-ground
+
+CRITICAL: Always pass 'subscription' and 'tenant' to Azure tools.";
 
         return new ChatClientAgent(
             _chatClient, 
