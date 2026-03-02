@@ -161,34 +161,5 @@ CRITICAL INSTRUCTIONS:
         return;
     }
 
-/*
-    while (true)
-    {
-        Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.Write("USER: ");
-        Console.ResetColor();
-        var input = Console.ReadLine();
-        if (string.IsNullOrEmpty(input) || input == "exit") break;
-
-    try 
-    {
-        var response = await agentClient.GetResponseAsync(
-            new List<ChatMessage> {
-                new ChatMessage(ChatRole.System, systemPrompt),
-                new ChatMessage(ChatRole.User, input)
-            }, 
-            new ChatOptions { Tools = aiTools }
-        );
-
-        Console.ForegroundColor = ConsoleColor.Green;
-        Console.WriteLine($"\nAGENT: {response.Text}\n");
-        Console.ResetColor();
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"[Error]: {ex.Message}");
-    }
-}
-*/
-
-await host.StopAsync();
+    // Wait for the host to shut down (since we disabled the interactive loop for the demo)
+    await host.WaitForShutdownAsync();
