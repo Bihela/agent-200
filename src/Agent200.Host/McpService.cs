@@ -1,6 +1,7 @@
 using Microsoft.Extensions.AI;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Text.Json;
@@ -15,8 +16,9 @@ namespace Agent200.Host;
 public class McpService : IMcpService
 {
     // Caches active clients to avoid redundant process spawning.
-    private readonly Dictionary<string, IMcpClient> _clients = new();
+    private readonly ConcurrentDictionary<string, IMcpClient> _clients = new();
     private readonly List<StdioClientTransport> _transports = new();
+    private readonly SemaphoreSlim _lock = new(1, 1);
 
 /// <inheritdoc />
 public async Task<IMcpClient> GetAzureClientAsync(string subscriptionId, string tenantId)
@@ -24,28 +26,37 @@ public async Task<IMcpClient> GetAzureClientAsync(string subscriptionId, string 
     const string key = "Azure";
     if (_clients.TryGetValue(key, out var existingClient)) return existingClient;
 
-    // Configuration for the Azure MCP server transport.
-    // Launches the '@azure/mcp' package via npx.
-    var options = new StdioClientTransportOptions
+    await _lock.WaitAsync();
+    try
     {
-        Command = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) ? "npx.cmd" : "npx", 
-        Arguments = new[] { "-y", "@azure/mcp", "server", "start" },
-        EnvironmentVariables = new Dictionary<string, string?>
+        if (_clients.TryGetValue(key, out existingClient)) return existingClient;
+
+        // Configuration for the Azure MCP server transport.
+        var options = new StdioClientTransportOptions
         {
-            ["AZURE_SUBSCRIPTION_ID"] = subscriptionId,
-            ["AZURE_TENANT_ID"] = tenantId
-        }
-    };
+            Command = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) ? "npx.cmd" : "npx", 
+            Arguments = new[] { "-y", "@azure/mcp", "server", "start" },
+            EnvironmentVariables = new Dictionary<string, string?>
+            {
+                ["AZURE_SUBSCRIPTION_ID"] = subscriptionId,
+                ["AZURE_TENANT_ID"] = tenantId
+            }
+        };
 
-    var transport = new StdioClientTransport(options);
-    var client = await McpClient.CreateAsync(transport);
-    var wrapper = new McpClientWrapper(client);
-    
-    _transports.Add(transport);
-    _clients[key] = wrapper;
+        var transport = new StdioClientTransport(options);
+        var client = await McpClient.CreateAsync(transport);
+        var wrapper = new McpClientWrapper(client);
+        
+        _transports.Add(transport);
+        _clients[key] = wrapper;
 
-    Console.WriteLine("[MCP] Connected to Azure MCP Server");
-    return wrapper;
+        Console.WriteLine("[MCP] Connected to Azure MCP Server");
+        return wrapper;
+    }
+    finally
+    {
+        _lock.Release();
+    }
 }
 
 /// <inheritdoc />
@@ -54,17 +65,27 @@ public async Task<IMcpClient> GetGitHubClientAsync(string githubToken)
     const string key = "GitHub";
     if (_clients.TryGetValue(key, out var existingClient)) return existingClient;
 
-    var options = CreateGitHubClientTransportOptions(githubToken);
+    await _lock.WaitAsync();
+    try
+    {
+        if (_clients.TryGetValue(key, out existingClient)) return existingClient;
 
-    var transport = new StdioClientTransport(options);
-    var client = await McpClient.CreateAsync(transport);
-    var wrapper = new McpClientWrapper(client);
+        var options = CreateGitHubClientTransportOptions(githubToken);
 
-    _transports.Add(transport);
-    _clients[key] = wrapper;
+        var transport = new StdioClientTransport(options);
+        var client = await McpClient.CreateAsync(transport);
+        var wrapper = new McpClientWrapper(client);
 
-    Console.WriteLine("[MCP] Connected to GitHub MCP Server (via npx)");
-    return wrapper;
+        _transports.Add(transport);
+        _clients[key] = wrapper;
+
+        Console.WriteLine("[MCP] Connected to GitHub MCP Server (via npx)");
+        return wrapper;
+    }
+    finally
+    {
+        _lock.Release();
+    }
 }
 
 /// <inheritdoc />
